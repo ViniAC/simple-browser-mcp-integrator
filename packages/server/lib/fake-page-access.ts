@@ -17,7 +17,7 @@ export type FakePageSeed = {
 
 export function createFakePageAccess(seed: FakePageSeed): PageAccess {
   return {
-    async open(url) {
+    async open(url, _target) {
       seed.url = url;
       return { url };
     },

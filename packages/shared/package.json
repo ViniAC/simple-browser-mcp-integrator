@@ -5,6 +5,7 @@
   "exports": {
     "./path": "./path.ts",
     "./page-inventory": "./page-inventory.ts",
-    "./action-error": "./action-error.ts"
+    "./action-error": "./action-error.ts",
+    "./open-target": "./open-target.ts"
   }
 }

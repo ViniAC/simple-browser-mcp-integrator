@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { openTargets } from "../../shared/open-target.js";
 import type { PageAccess } from "./page-access.js";
 import { runAction, runJson } from "./tool-result.js";
 
@@ -22,11 +23,15 @@ export function createServer(
     "open_page",
     {
       description: fixtureUrl
-        ? `Open a URL in the current page. The Fixture Page is at ${fixtureUrl}`
-        : "Open a URL in the current page.",
-      inputSchema: { url: z.string() },
+        ? `Open a URL in the current page, a new tab, or the focused tab. The Fixture Page is at ${fixtureUrl}`
+        : "Open a URL in the current page, a new tab, or the focused tab.",
+      inputSchema: {
+        url: z.string(),
+        target: z.enum(openTargets).optional(),
+      },
     },
-    async ({ url }) => runJson(() => pageAccess.open(url)),
+    async ({ url, target }) =>
+      runJson(() => pageAccess.open(url, target ?? "current")),
   );
 
   server.registerTool(

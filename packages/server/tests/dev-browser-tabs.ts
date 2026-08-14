@@ -50,6 +50,25 @@ export function createDevBrowserTabs(port: number) {
     await json(`/json/close/${id}`);
   }
 
+  async function focus(id: string) {
+    await json(`/json/activate/${id}`);
+  }
+
+  async function closeAll() {
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      const remaining = await pages().catch(() => []);
+      if (remaining.length === 0) {
+        return;
+      }
+      for (const page of remaining) {
+        await close(page.id).catch(() => {});
+      }
+      await delay(50);
+    }
+    throw new Error("timed out closing Dev Browser tabs");
+  }
+
   async function sleepExtensionWorker() {
     const before = (await json<ChromeTarget[]>("/json/list"))
       .filter((target) => target.type === "service_worker")
@@ -84,7 +103,7 @@ export function createDevBrowserTabs(port: number) {
     return JSON.parse(text) as T;
   }
 
-  return { ready, pages, openFocused, close, sleepExtensionWorker };
+  return { ready, pages, openFocused, focus, close, closeAll, sleepExtensionWorker };
 }
 
 async function waitUntil(check: () => Promise<boolean>, label: string) {

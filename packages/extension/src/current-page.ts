@@ -1,5 +1,7 @@
 /// <reference types="chrome" />
 
+import type { OpenTarget } from "../../shared/open-target.js";
+
 const tabIdKey = "currentPageTabId";
 const lostKey = "lostCurrentPage";
 
@@ -26,7 +28,18 @@ export async function boundTabId() {
   return focused;
 }
 
-export async function tabForOpen() {
+export async function tabForOpen(target: OpenTarget) {
+  if (target === "new") {
+    return createBoundTab();
+  }
+  if (target === "focused") {
+    await consumeLost();
+    const focused = await bindFocusedTab();
+    if (focused === undefined) {
+      throw new Error("not_connected");
+    }
+    return focused;
+  }
   const existing = await liveBoundTab();
   if (existing !== undefined) {
     return existing;
@@ -36,12 +49,28 @@ export async function tabForOpen() {
   if (focused !== undefined) {
     return focused;
   }
-  const created = await chrome.tabs.create({ url: "about:blank" });
-  if (created.id === undefined) {
+  return createBoundTab();
+}
+
+async function createBoundTab() {
+  const tab = await openBlankTab();
+  if (tab.id === undefined) {
     throw new Error("not_connected");
   }
-  await remember(created.id);
-  return created.id;
+  await remember(tab.id);
+  return tab.id;
+}
+
+async function openBlankTab() {
+  if ((await chrome.windows.getAll()).length > 0) {
+    return chrome.tabs.create({ url: "about:blank" });
+  }
+  const created = await chrome.windows.create({ url: "about:blank" });
+  const [tab] = created?.tabs ?? [];
+  if (!tab) {
+    throw new Error("not_connected");
+  }
+  return tab;
 }
 
 async function bindFocusedTab() {
