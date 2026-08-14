@@ -1,4 +1,4 @@
-import { copyFile, mkdtemp, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,5 +26,10 @@ export async function prepareExtension(config: {
     path.join(dir, "manifest.json"),
   );
   await writeFile(path.join(dir, "config.json"), JSON.stringify(config));
-  return dir;
+  return {
+    dir,
+    close() {
+      return rm(dir, { recursive: true, force: true }).catch(() => {});
+    },
+  };
 }

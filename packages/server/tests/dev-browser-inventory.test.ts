@@ -30,4 +30,14 @@ describe("Dev Browser Page Inventory", () => {
     expect(parsed.isError).toBe(false);
     expect(parsed.body).toEqual(fixtureInventory(session.fixtureUrl));
   }, 30_000);
+
+  it("the same loaded Extension Attaches after the Server restarts", async () => {
+    await session.host.callTool("open_page", { url: session.fixtureUrl });
+
+    await session.restartServer();
+
+    const parsed = parseToolJson(await session.host.callTool("get_inventory"));
+    expect(parsed.isError).toBe(false);
+    expect(parsed.body).toEqual(fixtureInventory(session.fixtureUrl));
+  }, 30_000);
 });

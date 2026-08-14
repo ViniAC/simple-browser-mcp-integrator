@@ -6,7 +6,7 @@ const attachTimeoutMs = 250;
 
 describe("not_connected when nothing Attaches", () => {
   it("MCP initialize succeeds when no User Browser is running and no Extension is attached", async () => {
-    const pageAccess = createAttachPageAccess({ attachTimeoutMs });
+    const pageAccess = await createAttachPageAccess({ attachTimeoutMs });
     const started = Date.now();
     const host = await startAgentHost(pageAccess);
 
@@ -26,7 +26,7 @@ describe("not_connected when nothing Attaches", () => {
   ] as const)(
     "%s waits a bounded time then returns not_connected",
     async (name, args) => {
-      const pageAccess = createAttachPageAccess({ attachTimeoutMs });
+      const pageAccess = await createAttachPageAccess({ attachTimeoutMs });
       const host = await startAgentHost(pageAccess);
 
       try {

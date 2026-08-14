@@ -1,5 +1,4 @@
 import { randomBytes } from "node:crypto";
-import { rm } from "node:fs/promises";
 import { ActionError } from "../../shared/action-error.js";
 import type { PageInventory } from "../../shared/page-inventory.js";
 import { startExtensionSocket } from "./extension-socket.js";
@@ -10,6 +9,7 @@ import { prepareExtension } from "./prepare-extension.js";
 const defaultAttachTimeoutMs = 20_000;
 
 export type ExtensionPageAccess = PageAccess & { close(): Promise<void> };
+export type AttachPageAccess = ExtensionPageAccess & { readonly port: number };
 
 type Session = {
   send<T>(type: string, payload?: Record<string, unknown>): Promise<T>;
@@ -20,20 +20,42 @@ export function createExtensionPageAccess(): ExtensionPageAccess {
   return pageAccessFromSession(startLaunchSession);
 }
 
-export function createAttachPageAccess(options?: {
+export async function createAttachPageAccess(options?: {
   attachTimeoutMs?: number;
-}): ExtensionPageAccess {
+  secret?: string;
+  port?: number;
+}): Promise<AttachPageAccess> {
   const attachTimeoutMs = options?.attachTimeoutMs ?? defaultAttachTimeoutMs;
-  return pageAccessFromSession(() => startAttachSession(attachTimeoutMs));
+  const secret = options?.secret ?? randomBytes(16).toString("hex");
+  const socket = await startExtensionSocket({
+    secret,
+    port: options?.port,
+  });
+  return Object.assign(
+    pageAccessFromSession(
+      () => startAttachSession(socket, attachTimeoutMs),
+      socket.close,
+    ),
+    { port: socket.port },
+  );
 }
 
 function pageAccessFromSession(
   start: () => Promise<Session>,
+  closeResource?: () => Promise<void>,
 ): ExtensionPageAccess {
   let session: Promise<Session> | undefined;
 
   async function ensure() {
-    session ??= start();
+    if (!session) {
+      const starting = start();
+      session = starting;
+      void starting.catch(() => {
+        if (session === starting) {
+          session = undefined;
+        }
+      });
+    }
     return session;
   }
 
@@ -58,6 +80,10 @@ function pageAccessFromSession(
       });
     },
     async close() {
+      if (closeResource) {
+        await closeResource();
+        return;
+      }
       if (!session) {
         return;
       }
@@ -70,13 +96,13 @@ function pageAccessFromSession(
   };
 }
 
-async function startAttachSession(attachTimeoutMs: number): Promise<Session> {
-  const token = randomBytes(16).toString("hex");
-  const socket = await startExtensionSocket(token);
+async function startAttachSession(
+  socket: Awaited<ReturnType<typeof startExtensionSocket>>,
+  attachTimeoutMs: number,
+): Promise<Session> {
   try {
     await socket.waitForExtension(attachTimeoutMs);
   } catch (error) {
-    await socket.close();
     throw notConnected(error);
   }
   return {
@@ -87,18 +113,18 @@ async function startAttachSession(attachTimeoutMs: number): Promise<Session> {
 
 async function startLaunchSession(): Promise<Session> {
   const token = randomBytes(16).toString("hex");
-  const socket = await startExtensionSocket(token);
+  const socket = await startExtensionSocket({ secret: token });
   const extensionDir = await prepareExtension({
     websocketUrl: `ws://127.0.0.1:${socket.port}`,
     token,
   });
-  const browser = await launchDevBrowser(extensionDir);
+  const browser = await launchDevBrowser(extensionDir.dir);
   try {
     await socket.waitForExtension(defaultAttachTimeoutMs);
   } catch (error) {
     await browser.close();
     await socket.close();
-    await removeTemp(extensionDir);
+    await extensionDir.close();
     throw notConnected(error);
   }
   return {
@@ -106,15 +132,11 @@ async function startLaunchSession(): Promise<Session> {
     async close() {
       await browser.close();
       await socket.close();
-      await removeTemp(extensionDir);
+      await extensionDir.close();
     },
   };
 }
 
 function notConnected(error: unknown) {
   return error instanceof ActionError ? error : new ActionError("not_connected");
-}
-
-function removeTemp(dir: string) {
-  return rm(dir, { recursive: true, force: true }).catch(() => {});
 }
