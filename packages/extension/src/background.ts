@@ -1,6 +1,7 @@
 /// <reference types="chrome" />
 
 import { collectInventory } from "./collect-inventory.js";
+import { performAction } from "./perform-action.js";
 
 type Config = {
   websocketUrl: string;
@@ -9,7 +10,9 @@ type Config = {
 
 type Request =
   | { id: number; type: "open"; url: string }
-  | { id: number; type: "inventory" };
+  | { id: number; type: "inventory" }
+  | { id: number; type: "click"; role: string; name: string }
+  | { id: number; type: "type"; role: string; name: string; value: string };
 
 void start();
 
@@ -45,6 +48,33 @@ async function handle(request: Request) {
       return openUrl(request.url);
     case "inventory":
       return readInventory();
+    case "click":
+    case "type":
+      return runAction(request);
+  }
+}
+
+async function runAction(
+  request: Extract<Request, { type: "click" | "type" }>,
+) {
+  const tabId = await currentTabId();
+  const [injection] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: performAction,
+    args: [
+      request.type === "type"
+        ? {
+            type: "type" as const,
+            role: request.role,
+            name: request.name,
+            value: request.value,
+          }
+        : { type: "click" as const, role: request.role, name: request.name },
+    ],
+  });
+  const result = injection?.result;
+  if (!result || !("ok" in result)) {
+    throw new Error(result && "error" in result ? result.error : "not_found");
   }
 }
 
