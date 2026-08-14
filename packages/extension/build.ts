@@ -8,6 +8,7 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
+import { pngCircle } from "./png.js";
 
 const extensionRoot = fileURLToPath(new URL("./", import.meta.url));
 export const loadableExtensionDir = path.join(extensionRoot, "dist");
@@ -67,6 +68,7 @@ export async function buildConfiguredExtension(
     path.join(dir, "manifest.json"),
   );
   await writeFile(path.join(dir, "config.json"), JSON.stringify(config));
+  await writeExtensionIcons(dir);
 }
 
 async function readConfig(configPath: string) {
@@ -111,6 +113,23 @@ function isMissingFile(error: unknown): error is NodeJS.ErrnoException {
     "code" in error &&
     (error as NodeJS.ErrnoException).code === "ENOENT"
   );
+}
+
+async function writeExtensionIcons(dir: string) {
+  const iconsDir = path.join(dir, "icons");
+  await mkdir(iconsDir, { recursive: true });
+  const colors = {
+    attached: [22, 163, 74],
+    "not-attached": [107, 114, 128],
+  } as const;
+  for (const [name, rgb] of Object.entries(colors)) {
+    for (const size of [16, 32] as const) {
+      await writeFile(
+        path.join(iconsDir, `${name}-${size}.png`),
+        pngCircle(size, rgb[0], rgb[1], rgb[2]),
+      );
+    }
+  }
 }
 
 if (

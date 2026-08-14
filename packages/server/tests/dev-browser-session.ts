@@ -117,7 +117,7 @@ function requireHost<T>(host: T | undefined): T {
   return host;
 }
 
-function availablePort() {
+export function availablePort() {
   return new Promise<number>((resolve, reject) => {
     const server = net.createServer();
     server.once("error", reject);
