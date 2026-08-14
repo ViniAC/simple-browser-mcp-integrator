@@ -12,6 +12,8 @@ export async function launchDevBrowser(extensionDir: string) {
     ignoreDefaultFlags: true,
     userDataDir,
     startingUrl: "about:blank",
+    logLevel: "silent",
+    handleSIGINT: false,
     chromeFlags: [
       ...Launcher.defaultFlags().filter((flag) => flag !== "--disable-extensions"),
       `--load-extension=${extensionDir}`,
