@@ -108,6 +108,9 @@ async function startAttachAgentHost(secret: string, port: number) {
     callTool(name: string, args?: Record<string, unknown>) {
       return client.callTool({ name, arguments: args });
     },
+    listTools() {
+      return client.listTools();
+    },
     close() {
       return client.close();
     },

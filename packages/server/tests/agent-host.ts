@@ -16,6 +16,9 @@ export async function startAgentHost(pageAccess: PageAccess) {
     callTool(name: string, args?: Record<string, unknown>) {
       return agentHost.callTool({ name, arguments: args });
     },
+    listTools() {
+      return agentHost.listTools();
+    },
     async close() {
       await agentHost.close();
       await server.close();

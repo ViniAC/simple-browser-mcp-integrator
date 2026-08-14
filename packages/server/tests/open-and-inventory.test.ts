@@ -20,6 +20,55 @@ describe("open_page and get_inventory", () => {
     await host.close();
   });
 
+  it("open_page accepts an optional Open target and omitting it equals current", async () => {
+    const host = await startSession({
+      title: "Start",
+      url: "https://example.test/start",
+      inputLabels: [],
+      elements: [],
+    });
+
+    const tools = await host.listTools();
+    const names = tools.tools.map((tool) => tool.name).sort();
+    const openPage = tools.tools.find((tool) => tool.name === "open_page");
+    const schema = openPage?.inputSchema as {
+      properties?: Record<string, unknown>;
+      required?: string[];
+    };
+
+    const omitted = parseToolJson(
+      await host.callTool("open_page", { url: "https://example.test/form" }),
+    );
+    const current = parseToolJson(
+      await host.callTool("open_page", {
+        url: "https://example.test/form",
+        target: "current",
+      }),
+    );
+
+    expect(names).toEqual(["click", "get_inventory", "open_page", "type"]);
+    expect(schema.properties).toEqual(
+      expect.objectContaining({
+        url: expect.objectContaining({ type: "string" }),
+        target: expect.objectContaining({
+          type: "string",
+          enum: ["current", "new", "focused"],
+        }),
+      }),
+    );
+    expect(schema.required).toEqual(["url"]);
+    expect(omitted).toEqual({
+      isError: false,
+      body: { url: "https://example.test/form" },
+    });
+    expect(current).toEqual({
+      isError: false,
+      body: { url: "https://example.test/form" },
+    });
+
+    await host.close();
+  });
+
   it("get_inventory returns title, URL, input labels, and interactive elements", async () => {
     const host = await startSession({
       title: "Sign in",

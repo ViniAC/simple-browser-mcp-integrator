@@ -1,6 +1,7 @@
 /// <reference types="chrome" />
 
 import { isActionErrorCode } from "../../shared/action-error.js";
+import { isOpenTarget, type OpenTarget } from "../../shared/open-target.js";
 import { collectInventory } from "./collect-inventory.js";
 import { boundTabId, tabForOpen, watchCurrentPage } from "./current-page.js";
 import { performAction } from "./perform-action.js";
@@ -11,7 +12,7 @@ type Config = {
 };
 
 type Request =
-  | { id: number; type: "open"; url: string }
+  | { id: number; type: "open"; url: string; target?: OpenTarget }
   | { id: number; type: "inventory" }
   | { id: number; type: "click"; role: string; name: string }
   | { id: number; type: "type"; role: string; name: string; value: string };
@@ -56,7 +57,7 @@ function connect(config: Config) {
 async function handle(request: Request) {
   switch (request.type) {
     case "open":
-      return openUrl(request.url);
+      return openUrl(request.url, openTargetOf(request.target));
     case "inventory":
       return readInventory();
     case "click":
@@ -127,10 +128,11 @@ async function readInventory() {
   return injection?.result;
 }
 
-async function openUrl(url: string) {
-  const tabId = await tabForOpen();
-  const pendingOpen = waitUntilComplete(tabId);
+async function openUrl(url: string, target: OpenTarget) {
+  const tabId = await tabForOpen(target);
+  const pendingOpen = waitUntilOpen(tabId, url, false);
   await chrome.tabs.update(tabId, { url });
+  pendingOpen.poll();
   const tab = await pendingOpen.promise;
   if (!tab.url) {
     throw new Error("Open did not produce a URL");
@@ -138,10 +140,15 @@ async function openUrl(url: string) {
   return { url: tab.url };
 }
 
-function waitUntilOpen(tabId: number, url: string) {
+function openTargetOf(value: unknown): OpenTarget {
+  return isOpenTarget(value) ? value : "current";
+}
+
+function waitUntilOpen(tabId: number, url: string, pollImmediately = true) {
   let listener: (id: number, info: chrome.tabs.OnUpdatedInfo) => void;
+  let settle: (tab: chrome.tabs.Tab) => void = () => {};
   const promise = new Promise<chrome.tabs.Tab>((resolve) => {
-    const settle = (tab: chrome.tabs.Tab) => {
+    settle = (tab) => {
       if (tab.url !== url || tab.status !== "complete") {
         return;
       }
@@ -154,30 +161,15 @@ function waitUntilOpen(tabId: number, url: string) {
       }
     };
     chrome.tabs.onUpdated.addListener(listener);
-    void chrome.tabs.get(tabId).then(settle);
+    if (pollImmediately) {
+      void chrome.tabs.get(tabId).then(settle);
+    }
   });
   return {
     promise,
-    cancel() {
-      chrome.tabs.onUpdated.removeListener(listener);
+    poll() {
+      void chrome.tabs.get(tabId).then(settle);
     },
-  };
-}
-
-function waitUntilComplete(tabId: number) {
-  let listener: (id: number, info: chrome.tabs.OnUpdatedInfo) => void;
-  const promise = new Promise<chrome.tabs.Tab>((resolve) => {
-    listener = (id, info) => {
-      if (id !== tabId || info.status !== "complete") {
-        return;
-      }
-      chrome.tabs.onUpdated.removeListener(listener);
-      void chrome.tabs.get(tabId).then(resolve);
-    };
-    chrome.tabs.onUpdated.addListener(listener);
-  });
-  return {
-    promise,
     cancel() {
       chrome.tabs.onUpdated.removeListener(listener);
     },

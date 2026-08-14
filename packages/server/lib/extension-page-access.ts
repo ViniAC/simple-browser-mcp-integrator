@@ -53,8 +53,8 @@ function pageAccessFromSession(
   }
 
   return {
-    async open(url) {
-      return (await ensure()).send<{ url: string }>("open", { url });
+    async open(url, target) {
+      return (await ensure()).send<{ url: string }>("open", { url, target });
     },
     async getInventory() {
       return (await ensure()).send<PageInventory>("inventory");
