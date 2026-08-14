@@ -1,12 +1,18 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { buildLoadableExtension } from "../extension/build.js";
 import { createServer } from "./lib/create-server.js";
 import { createAttachPageAccess } from "./lib/extension-page-access.js";
 import { fixturePort, serveFixture } from "./lib/serve-fixture.js";
 
-const fixture = await serveFixture(fixturePort);
+loadDotEnv();
+
+const fixture = envFlag("BROWSER_MCP_SERVE_FIXTURE")
+  ? await serveFixture(envInt("BROWSER_MCP_FIXTURE_PORT") ?? fixturePort)
+  : undefined;
 const pageAccess = await createAttachPageAccess(await resolveAttach());
-const server = createServer(pageAccess, fixture.url);
+const server = createServer(pageAccess, fixture?.url);
 
 let shuttingDown = false;
 async function shutdown() {
@@ -16,7 +22,7 @@ async function shutdown() {
   shuttingDown = true;
   await server.close();
   await pageAccess.close();
-  fixture.close();
+  fixture?.close();
   process.exit(0);
 }
 
@@ -52,4 +58,21 @@ function envInt(name: string) {
     throw new Error(`${name} must be a positive integer`);
   }
   return value;
+}
+
+function envFlag(name: string) {
+  const raw = process.env[name];
+  return raw === "1" || raw === "true";
+}
+
+function loadDotEnv() {
+  const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+  try {
+    process.loadEnvFile(path.join(repoRoot, ".env"));
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return;
+    }
+    throw error;
+  }
 }
