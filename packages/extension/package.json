@@ -1,0 +1,5 @@
+{
+  "name": "@browser-mcp/extension",
+  "private": true,
+  "type": "module"
+}

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture Page</title>
+  </head>
+  <body>
+    <h1>Fixture Page</h1>
+    <form id="signup">
+      <p>
+        <label for="full-name">Full name</label>
+        <input id="full-name" name="full-name" type="text" />
+      </p>
+      <p>
+        <label for="secret">Password</label>
+        <input id="secret" name="secret" type="password" />
+      </p>
+      <p>
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes"></textarea>
+      </p>
+      <p>
+        <label for="country">Country</label>
+        <select id="country" name="country">
+          <option value="">Choose</option>
+          <option value="br">Brazil</option>
+          <option value="us">United States</option>
+        </select>
+      </p>
+      <p>
+        <label>
+          <input id="subscribe" name="subscribe" type="checkbox" />
+          Subscribe
+        </label>
+      </p>
+      <p>
+        <button type="submit">Submit</button>
+      </p>
+      <p>
+        <label for="result">Result</label>
+        <input id="result" name="result" type="text" value="Ready" readonly />
+      </p>
+    </form>
+    <p><a href="done.html">Continue</a></p>
+    <p>
+      <button type="button">Duplicate</button>
+      <button type="button">Duplicate</button>
+    </p>
+    <p>
+      <button type="button" disabled>Locked</button>
+    </p>
+    <script>
+      document.getElementById("signup").addEventListener("submit", (event) => {
+        event.preventDefault();
+        document.getElementById("result").value = "Submitted";
+      });
+    </script>
+  </body>
+</html>

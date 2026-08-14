@@ -2,9 +2,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createFakePageAccess, type FakePageSeed } from "../fake-page-access.js";
 import { createServer } from "../index.js";
+import type { PageAccess } from "../lib/page-access.js";
 
-export async function startSession(seed: FakePageSeed) {
-  const server = createServer(createFakePageAccess(seed));
+export async function startAgentHost(pageAccess: PageAccess) {
+  const server = createServer(pageAccess);
   const [hostTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const agentHost = new Client({ name: "test-agent-host", version: "0.0.0" });
   await Promise.all([
@@ -20,6 +21,10 @@ export async function startSession(seed: FakePageSeed) {
       await server.close();
     },
   };
+}
+
+export async function startSession(seed: FakePageSeed) {
+  return startAgentHost(createFakePageAccess(seed));
 }
 
 export function parseToolJson(result: unknown) {

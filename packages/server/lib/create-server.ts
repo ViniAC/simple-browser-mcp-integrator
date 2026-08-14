@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { PageAccess } from "./page-access.js";
-import { jsonResult, runAction } from "./tool-result.js";
+import { runAction, runJson } from "./tool-result.js";
 
 export function createServer(pageAccess: PageAccess): McpServer {
   const server = new McpServer({
@@ -15,7 +15,7 @@ export function createServer(pageAccess: PageAccess): McpServer {
       description: "Open a URL in the current page.",
       inputSchema: { url: z.string() },
     },
-    async ({ url }) => jsonResult(await pageAccess.open(url)),
+    async ({ url }) => runJson(() => pageAccess.open(url)),
   );
 
   server.registerTool(
@@ -23,7 +23,7 @@ export function createServer(pageAccess: PageAccess): McpServer {
     {
       description: "Read the Page Inventory of the current page.",
     },
-    async () => jsonResult(await pageAccess.getInventory()),
+    async () => runJson(() => pageAccess.getInventory()),
   );
 
   server.registerTool(

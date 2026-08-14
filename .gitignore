@@ -15,6 +15,9 @@ out/
 # Dev Browser profile (created at runtime)
 .chrome-profile/
 
+# Downloaded Chromium / Chrome for Testing
+.browser-cache/
+
 # Extension packaging / keys
 *.crx
 *.pem
