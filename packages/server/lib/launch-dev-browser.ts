@@ -18,11 +18,13 @@ export async function launchDevBrowser(extensionDir: string) {
       ...Launcher.defaultFlags().filter((flag) => flag !== "--disable-extensions"),
       `--load-extension=${extensionDir}`,
       `--disable-extensions-except=${extensionDir}`,
+      "--remote-allow-origins=*",
       "--headless=new",
       "--disable-gpu",
     ],
   });
   return {
+    port: launched.port,
     async close() {
       await launched.kill();
       await rm(userDataDir, { recursive: true, force: true }).catch(() => {

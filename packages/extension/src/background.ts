@@ -2,6 +2,7 @@
 
 import { isActionErrorCode } from "../../shared/action-error.js";
 import { collectInventory } from "./collect-inventory.js";
+import { boundTabId, tabForOpen, watchCurrentPage } from "./current-page.js";
 import { performAction } from "./perform-action.js";
 
 type Config = {
@@ -16,6 +17,7 @@ type Request =
   | { id: number; type: "type"; role: string; name: string; value: string };
 
 void start();
+watchCurrentPage();
 
 async function start() {
   const config = (await fetch(chrome.runtime.getURL("config.json")).then(
@@ -66,7 +68,7 @@ async function handle(request: Request) {
 async function runAction(
   request: Extract<Request, { type: "click" | "type" }>,
 ) {
-  const tabId = await currentTabId();
+  const tabId = await boundTabId();
   const urlBefore = (await chrome.tabs.get(tabId)).url;
   try {
     const [injection] = await chrome.scripting.executeScript({
@@ -117,7 +119,7 @@ async function finishOpenIfUrlChanged(
 }
 
 async function readInventory() {
-  const tabId = await currentTabId();
+  const tabId = await boundTabId();
   const [injection] = await chrome.scripting.executeScript({
     target: { tabId },
     func: collectInventory,
@@ -126,7 +128,7 @@ async function readInventory() {
 }
 
 async function openUrl(url: string) {
-  const tabId = await currentTabId();
+  const tabId = await tabForOpen();
   const pendingOpen = waitUntilComplete(tabId);
   await chrome.tabs.update(tabId, { url });
   const tab = await pendingOpen.promise;
@@ -134,31 +136,6 @@ async function openUrl(url: string) {
     throw new Error("Open did not produce a URL");
   }
   return { url: tab.url };
-}
-
-let currentPageTabId: number | undefined;
-
-async function currentTabId() {
-  if (currentPageTabId !== undefined) {
-    try {
-      await chrome.tabs.get(currentPageTabId);
-      return currentPageTabId;
-    } catch {
-      currentPageTabId = undefined;
-    }
-  }
-  const tabs = await chrome.tabs.query({});
-  const existing = tabs.find((tab) => tab.id !== undefined);
-  if (existing?.id !== undefined) {
-    currentPageTabId = existing.id;
-    return existing.id;
-  }
-  const created = await chrome.tabs.create({ url: "about:blank" });
-  if (created.id === undefined) {
-    throw new Error("Dev Browser has no current page");
-  }
-  currentPageTabId = created.id;
-  return created.id;
 }
 
 function waitUntilOpen(tabId: number, url: string) {
