@@ -8,6 +8,10 @@
   "dependencies": {
     "@browser-mcp/shared": "*",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@puppeteer/browsers": "^3.2.0",
+    "chrome-launcher": "^1.2.1",
+    "esbuild": "^0.28.2",
+    "ws": "^8.21.3",
     "zod": "^3.25.76"
   }
 }
