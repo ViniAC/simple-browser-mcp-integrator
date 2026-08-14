@@ -58,23 +58,31 @@ async function runAction(
   request: Extract<Request, { type: "click" | "type" }>,
 ) {
   const tabId = await currentTabId();
-  const [injection] = await chrome.scripting.executeScript({
-    target: { tabId },
-    func: performAction,
-    args: [
-      request.type === "type"
-        ? {
-            type: "type" as const,
-            role: request.role,
-            name: request.name,
-            value: request.value,
-          }
-        : { type: "click" as const, role: request.role, name: request.name },
-    ],
-  });
-  const result = injection?.result;
-  if (!result || !("ok" in result)) {
-    throw new Error(result && "error" in result ? result.error : "not_found");
+  const loaded = request.type === "click" ? waitForComplete(tabId) : undefined;
+  try {
+    const [injection] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: performAction,
+      args: [
+        request.type === "type"
+          ? {
+              type: "type" as const,
+              role: request.role,
+              name: request.name,
+              value: request.value,
+            }
+          : { type: "click" as const, role: request.role, name: request.name },
+      ],
+    });
+    const result = injection?.result;
+    if (!result || !("ok" in result)) {
+      throw new Error(result && "error" in result ? result.error : "not_found");
+    }
+    if (loaded && result.opens) {
+      await loaded.promise;
+    }
+  } finally {
+    loaded?.cancel();
   }
 }
 
@@ -91,7 +99,7 @@ async function openUrl(url: string) {
   const tabId = await currentTabId();
   const loaded = waitForComplete(tabId);
   await chrome.tabs.update(tabId, { url });
-  await loaded;
+  await loaded.promise;
   const tab = await chrome.tabs.get(tabId);
   if (!tab.url) {
     throw new Error("Open did not produce a URL");
@@ -125,8 +133,9 @@ async function currentTabId() {
 }
 
 function waitForComplete(tabId: number) {
-  return new Promise<void>((resolve) => {
-    const listener = (id: number, info: chrome.tabs.OnUpdatedInfo) => {
+  let listener: (id: number, info: chrome.tabs.OnUpdatedInfo) => void;
+  const promise = new Promise<void>((resolve) => {
+    listener = (id, info) => {
       if (id === tabId && info.status === "complete") {
         chrome.tabs.onUpdated.removeListener(listener);
         resolve();
@@ -134,4 +143,10 @@ function waitForComplete(tabId: number) {
     };
     chrome.tabs.onUpdated.addListener(listener);
   });
+  return {
+    promise,
+    cancel() {
+      chrome.tabs.onUpdated.removeListener(listener);
+    },
+  };
 }

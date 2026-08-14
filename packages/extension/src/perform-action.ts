@@ -3,7 +3,7 @@ type Action =
   | { type: "click"; role: string; name: string };
 
 type ActionResult =
-  | { ok: true }
+  | { ok: true; opens?: boolean }
   | { error: "not_found" | "ambiguous" | "disabled" };
 
 export function performAction(action: Action): ActionResult {
@@ -96,7 +96,27 @@ export function performAction(action: Action): ActionResult {
   }
 
   if (action.type === "click") {
+    if (element instanceof HTMLAnchorElement && element.href) {
+      const url = element.href;
+      element.click();
+      location.assign(url);
+      return { ok: true, opens: true };
+    }
     element.click();
+    return { ok: true };
+  }
+
+  if (element instanceof HTMLSelectElement) {
+    const option = [...element.options].find(
+      (candidate) =>
+        candidate.label === action.value || candidate.value === action.value,
+    );
+    if (!option) {
+      return { error: "not_found" };
+    }
+    element.value = option.value;
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+    element.dispatchEvent(new Event("change", { bubbles: true }));
     return { ok: true };
   }
 

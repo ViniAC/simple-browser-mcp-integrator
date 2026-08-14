@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { parseToolJson } from "./agent-host.js";
 import { startDevBrowserSession } from "./dev-browser-session.js";
+import { fixtureInventory } from "./fixture-inventory.js";
 
 describe("Dev Browser Type and Click", () => {
   let session: Awaited<ReturnType<typeof startDevBrowserSession>>;
@@ -80,6 +81,123 @@ describe("Dev Browser Type and Click", () => {
     );
   }, 30_000);
 
+  it("type on Country chooses the option whose label equals the given string", async () => {
+    await session.host.callTool("open_page", { url: session.fixtureUrl });
+    const typed = parseToolJson(
+      await session.host.callTool("type", {
+        role: "combobox",
+        name: "Country",
+        value: "Brazil",
+      }),
+    );
+    const inventory = parseToolJson(
+      await session.host.callTool("get_inventory"),
+    );
+
+    expect(typed.isError).toBe(false);
+    expect(typed.body).toEqual({ ok: true });
+    expect(inventory.body).toEqual(
+      fixtureInventory(session.fixtureUrl, { country: "Brazil" }),
+    );
+  }, 30_000);
+
+  it("type on Country chooses the option whose value equals the given string", async () => {
+    await session.host.callTool("open_page", { url: session.fixtureUrl });
+    const typed = parseToolJson(
+      await session.host.callTool("type", {
+        role: "combobox",
+        name: "Country",
+        value: "us",
+      }),
+    );
+    const inventory = parseToolJson(
+      await session.host.callTool("get_inventory"),
+    );
+
+    expect(typed.isError).toBe(false);
+    expect(typed.body).toEqual({ ok: true });
+    expect(inventory.body).toEqual(
+      fixtureInventory(session.fixtureUrl, { country: "United States" }),
+    );
+  }, 30_000);
+
+  it("type on Country fails when no option matches; the previous value is unchanged", async () => {
+    await session.host.callTool("open_page", { url: session.fixtureUrl });
+    await session.host.callTool("type", {
+      role: "combobox",
+      name: "Country",
+      value: "Brazil",
+    });
+    const typed = parseToolJson(
+      await session.host.callTool("type", {
+        role: "combobox",
+        name: "Country",
+        value: "Narnia",
+      }),
+    );
+    const inventory = parseToolJson(
+      await session.host.callTool("get_inventory"),
+    );
+
+    expect(typed).toEqual({ isError: true, body: { error: "not_found" } });
+    expect(inventory.body).toEqual(
+      fixtureInventory(session.fixtureUrl, { country: "Brazil" }),
+    );
+  }, 30_000);
+
+  it("click Subscribe toggles the checkbox; re-read shows checked then unchecked", async () => {
+    await session.host.callTool("open_page", { url: session.fixtureUrl });
+    const checked = parseToolJson(
+      await session.host.callTool("click", {
+        role: "checkbox",
+        name: "Subscribe",
+      }),
+    );
+    const afterCheck = parseToolJson(
+      await session.host.callTool("get_inventory"),
+    );
+    const unchecked = parseToolJson(
+      await session.host.callTool("click", {
+        role: "checkbox",
+        name: "Subscribe",
+      }),
+    );
+    const afterUncheck = parseToolJson(
+      await session.host.callTool("get_inventory"),
+    );
+
+    expect(checked.isError).toBe(false);
+    expect(checked.body).toEqual({ ok: true });
+    expect(afterCheck.body).toEqual(
+      fixtureInventory(session.fixtureUrl, { subscribe: "checked" }),
+    );
+    expect(unchecked.isError).toBe(false);
+    expect(unchecked.body).toEqual({ ok: true });
+    expect(afterUncheck.body).toEqual(
+      fixtureInventory(session.fixtureUrl, { subscribe: "unchecked" }),
+    );
+  }, 30_000);
+
+  it("click Continue loads the link target in the current page", async () => {
+    await session.host.callTool("open_page", { url: session.fixtureUrl });
+    const clicked = parseToolJson(
+      await session.host.callTool("click", { role: "link", name: "Continue" }),
+    );
+    const inventory = parseToolJson(
+      await session.host.callTool("get_inventory"),
+    );
+    const doneUrl = new URL("done.html", session.fixtureUrl).href;
+
+    expect(clicked.isError).toBe(false);
+    expect(clicked.body).toEqual({ ok: true });
+    expect(inventory.body).toEqual({
+      title: "Fixture Continue",
+      url: doneUrl,
+      inputLabels: [],
+      elements: [],
+    });
+  }, 30_000);
+
   it("click Submit changes the Result region on a later inventory", async () => {
     await session.host.callTool("open_page", { url: session.fixtureUrl });
     await session.host.callTool("type", {
@@ -123,59 +241,3 @@ describe("Dev Browser Type and Click", () => {
     );
   }, 30_000);
 });
-
-function fixtureInventory(
-  url: string,
-  values: { fullName?: string; notes?: string; password?: string; result?: string } = {},
-) {
-  return {
-    title: "Fixture Page",
-    url,
-    inputLabels: [
-      "Full name",
-      "Password",
-      "Notes",
-      "Country",
-      "Subscribe",
-      "Result",
-    ],
-    elements: [
-      {
-        role: "textbox",
-        name: "Full name",
-        value: values.fullName ?? "",
-        enabled: true,
-      },
-      {
-        role: "textbox",
-        name: "Password",
-        value: values.password ?? "empty",
-        enabled: true,
-      },
-      {
-        role: "textbox",
-        name: "Notes",
-        value: values.notes ?? "",
-        enabled: true,
-      },
-      { role: "combobox", name: "Country", value: "Choose", enabled: true },
-      {
-        role: "checkbox",
-        name: "Subscribe",
-        value: "unchecked",
-        enabled: true,
-      },
-      { role: "button", name: "Submit", value: "", enabled: true },
-      {
-        role: "textbox",
-        name: "Result",
-        value: values.result ?? "Ready",
-        enabled: true,
-      },
-      { role: "link", name: "Continue", value: "", enabled: true },
-      { role: "button", name: "Duplicate", value: "", enabled: true },
-      { role: "button", name: "Duplicate", value: "", enabled: true },
-      { role: "button", name: "Locked", value: "", enabled: false },
-    ],
-  };
-}
