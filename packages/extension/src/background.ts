@@ -1,5 +1,6 @@
 /// <reference types="chrome" />
 
+import { isActionErrorCode } from "../../shared/action-error.js";
 import { collectInventory } from "./collect-inventory.js";
 import { performAction } from "./perform-action.js";
 
@@ -33,8 +34,12 @@ function connect(config: Config) {
       socket.send(
         JSON.stringify({ id: request.id, result: await handle(request) }),
       );
-    } catch {
-      socket.send(JSON.stringify({ id: request.id, error: "not_found" }));
+    } catch (error) {
+      const code =
+        error instanceof Error && isActionErrorCode(error.message)
+          ? error.message
+          : "not_found";
+      socket.send(JSON.stringify({ id: request.id, error: code }));
     }
   });
   socket.addEventListener("close", () => {
@@ -58,32 +63,53 @@ async function runAction(
   request: Extract<Request, { type: "click" | "type" }>,
 ) {
   const tabId = await currentTabId();
-  const loaded = request.type === "click" ? waitForComplete(tabId) : undefined;
+  const urlBefore = (await chrome.tabs.get(tabId)).url;
   try {
     const [injection] = await chrome.scripting.executeScript({
       target: { tabId },
+      world: "MAIN",
       func: performAction,
-      args: [
-        request.type === "type"
-          ? {
-              type: "type" as const,
-              role: request.role,
-              name: request.name,
-              value: request.value,
-            }
-          : { type: "click" as const, role: request.role, name: request.name },
-      ],
+      args: [actionFrom(request)],
     });
     const result = injection?.result;
     if (!result || !("ok" in result)) {
       throw new Error(result && "error" in result ? result.error : "not_found");
     }
-    if (loaded && result.opens) {
-      await loaded.promise;
+    if (result.open?.url) {
+      await waitUntilOpen(tabId, result.open.url).promise;
     }
-  } finally {
-    loaded?.cancel();
+  } catch (error) {
+    if (await finishOpenIfUrlChanged(tabId, urlBefore)) {
+      return;
+    }
+    throw error;
   }
+}
+
+function actionFrom(request: Extract<Request, { type: "click" | "type" }>) {
+  if (request.type === "type") {
+    return {
+      type: "type" as const,
+      role: request.role,
+      name: request.name,
+      value: request.value,
+    };
+  }
+  return { type: "click" as const, role: request.role, name: request.name };
+}
+
+async function finishOpenIfUrlChanged(
+  tabId: number,
+  urlBefore: string | undefined,
+) {
+  const tab = await chrome.tabs.get(tabId);
+  if (!tab.url || tab.url === urlBefore) {
+    return false;
+  }
+  if (tab.status !== "complete") {
+    await waitUntilOpen(tabId, tab.url).promise;
+  }
+  return true;
 }
 
 async function readInventory() {
@@ -97,10 +123,9 @@ async function readInventory() {
 
 async function openUrl(url: string) {
   const tabId = await currentTabId();
-  const loaded = waitForComplete(tabId);
+  const pendingOpen = waitUntilComplete(tabId);
   await chrome.tabs.update(tabId, { url });
-  await loaded.promise;
-  const tab = await chrome.tabs.get(tabId);
+  const tab = await pendingOpen.promise;
   if (!tab.url) {
     throw new Error("Open did not produce a URL");
   }
@@ -132,14 +157,41 @@ async function currentTabId() {
   return created.id;
 }
 
-function waitForComplete(tabId: number) {
+function waitUntilOpen(tabId: number, url: string) {
   let listener: (id: number, info: chrome.tabs.OnUpdatedInfo) => void;
-  const promise = new Promise<void>((resolve) => {
-    listener = (id, info) => {
-      if (id === tabId && info.status === "complete") {
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
+  const promise = new Promise<chrome.tabs.Tab>((resolve) => {
+    const settle = (tab: chrome.tabs.Tab) => {
+      if (tab.url !== url || tab.status !== "complete") {
+        return;
       }
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve(tab);
+    };
+    listener = (id) => {
+      if (id === tabId) {
+        void chrome.tabs.get(tabId).then(settle);
+      }
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+    void chrome.tabs.get(tabId).then(settle);
+  });
+  return {
+    promise,
+    cancel() {
+      chrome.tabs.onUpdated.removeListener(listener);
+    },
+  };
+}
+
+function waitUntilComplete(tabId: number) {
+  let listener: (id: number, info: chrome.tabs.OnUpdatedInfo) => void;
+  const promise = new Promise<chrome.tabs.Tab>((resolve) => {
+    listener = (id, info) => {
+      if (id !== tabId || info.status !== "complete") {
+        return;
+      }
+      chrome.tabs.onUpdated.removeListener(listener);
+      void chrome.tabs.get(tabId).then(resolve);
     };
     chrome.tabs.onUpdated.addListener(listener);
   });

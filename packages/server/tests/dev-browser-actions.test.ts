@@ -14,7 +14,7 @@ describe("Dev Browser Type and Click", () => {
     await session.close();
   });
 
-  it("type replaces the Full name value; re-read shows the new value", async () => {
+  it("type replaces the Full name value; a later inventory shows the new value", async () => {
     await session.host.callTool("open_page", { url: session.fixtureUrl });
     await session.host.callTool("type", {
       role: "textbox",
@@ -81,45 +81,32 @@ describe("Dev Browser Type and Click", () => {
     );
   }, 30_000);
 
-  it("type on Country chooses the option whose label equals the given string", async () => {
-    await session.host.callTool("open_page", { url: session.fixtureUrl });
-    const typed = parseToolJson(
-      await session.host.callTool("type", {
-        role: "combobox",
-        name: "Country",
-        value: "Brazil",
-      }),
-    );
-    const inventory = parseToolJson(
-      await session.host.callTool("get_inventory"),
-    );
+  it.each([
+    { value: "Brazil", country: "Brazil" },
+    { value: "us", country: "United States" },
+  ])(
+    "type on Country with $value shows $country in the inventory",
+    async ({ value, country }) => {
+      await session.host.callTool("open_page", { url: session.fixtureUrl });
+      const typed = parseToolJson(
+        await session.host.callTool("type", {
+          role: "combobox",
+          name: "Country",
+          value,
+        }),
+      );
+      const inventory = parseToolJson(
+        await session.host.callTool("get_inventory"),
+      );
 
-    expect(typed.isError).toBe(false);
-    expect(typed.body).toEqual({ ok: true });
-    expect(inventory.body).toEqual(
-      fixtureInventory(session.fixtureUrl, { country: "Brazil" }),
-    );
-  }, 30_000);
-
-  it("type on Country chooses the option whose value equals the given string", async () => {
-    await session.host.callTool("open_page", { url: session.fixtureUrl });
-    const typed = parseToolJson(
-      await session.host.callTool("type", {
-        role: "combobox",
-        name: "Country",
-        value: "us",
-      }),
-    );
-    const inventory = parseToolJson(
-      await session.host.callTool("get_inventory"),
-    );
-
-    expect(typed.isError).toBe(false);
-    expect(typed.body).toEqual({ ok: true });
-    expect(inventory.body).toEqual(
-      fixtureInventory(session.fixtureUrl, { country: "United States" }),
-    );
-  }, 30_000);
+      expect(typed.isError).toBe(false);
+      expect(typed.body).toEqual({ ok: true });
+      expect(inventory.body).toEqual(
+        fixtureInventory(session.fixtureUrl, { country }),
+      );
+    },
+    30_000,
+  );
 
   it("type on Country fails when no option matches; the previous value is unchanged", async () => {
     await session.host.callTool("open_page", { url: session.fixtureUrl });
@@ -139,13 +126,13 @@ describe("Dev Browser Type and Click", () => {
       await session.host.callTool("get_inventory"),
     );
 
-    expect(typed).toEqual({ isError: true, body: { error: "not_found" } });
+    expect(typed).toEqual({ isError: true, body: { error: "no_match" } });
     expect(inventory.body).toEqual(
       fixtureInventory(session.fixtureUrl, { country: "Brazil" }),
     );
   }, 30_000);
 
-  it("click Subscribe toggles the checkbox; re-read shows checked then unchecked", async () => {
+  it("click Subscribe toggles the checkbox; a later inventory shows checked then unchecked", async () => {
     await session.host.callTool("open_page", { url: session.fixtureUrl });
     const checked = parseToolJson(
       await session.host.callTool("click", {
