@@ -64,21 +64,33 @@ async function openUrl(url: string) {
   await loaded;
   const tab = await chrome.tabs.get(tabId);
   if (!tab.url) {
-    throw new Error("open");
+    throw new Error("Open did not produce a URL");
   }
   return { url: tab.url };
 }
 
+let currentPageTabId: number | undefined;
+
 async function currentTabId() {
+  if (currentPageTabId !== undefined) {
+    try {
+      await chrome.tabs.get(currentPageTabId);
+      return currentPageTabId;
+    } catch {
+      currentPageTabId = undefined;
+    }
+  }
   const tabs = await chrome.tabs.query({});
   const existing = tabs.find((tab) => tab.id !== undefined);
   if (existing?.id !== undefined) {
+    currentPageTabId = existing.id;
     return existing.id;
   }
   const created = await chrome.tabs.create({ url: "about:blank" });
   if (created.id === undefined) {
-    throw new Error("tab");
+    throw new Error("Dev Browser has no current page");
   }
+  currentPageTabId = created.id;
   return created.id;
 }
 

@@ -7,13 +7,13 @@ type Pending = {
   reject: (error: Error) => void;
 };
 
-export async function startExtensionBridge(token: string) {
+export async function startExtensionSocket(token: string) {
   const pending = new Map<number, Pending>();
   let nextId = 1;
   let extension: WebSocket | undefined;
-  let connected!: (socket: WebSocket) => void;
-  const connection = new Promise<WebSocket>((resolve) => {
-    connected = resolve;
+  let resolveExtension!: (socket: WebSocket) => void;
+  const extensionConnected = new Promise<WebSocket>((resolve) => {
+    resolveExtension = resolve;
   });
 
   const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });
@@ -45,7 +45,7 @@ export async function startExtensionBridge(token: string) {
       }
       waiter.resolve(message.result);
     });
-    connected(socket);
+    resolveExtension(socket);
   });
 
   await new Promise<void>((resolve) => wss.once("listening", resolve));
@@ -56,7 +56,7 @@ export async function startExtensionBridge(token: string) {
     waitForExtension(ms: number) {
       let timer: ReturnType<typeof setTimeout>;
       return Promise.race([
-        connection.finally(() => clearTimeout(timer)),
+        extensionConnected.finally(() => clearTimeout(timer)),
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new ActionError("not_connected")), ms);
         }),
