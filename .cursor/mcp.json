@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "browser-mcp-integrator": {
+      "command": "node",
+      "args": ["--import", "tsx", "packages/server/stdio.ts"]
+    }
+  }
+}

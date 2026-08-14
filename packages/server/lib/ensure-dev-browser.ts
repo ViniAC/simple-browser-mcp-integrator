@@ -20,6 +20,7 @@ export async function ensureDevBrowser() {
     buildId,
     cacheDir,
     platform,
+    downloadProgressCallback: () => {},
   });
   return computeExecutablePath({
     browser: Browser.CHROMIUM,
