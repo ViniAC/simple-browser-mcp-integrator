@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Dev Browser profile (created at runtime)
+.chrome-profile/
+
+# Extension packaging / keys
+*.crx
+*.pem
+
+# Tests & coverage
+coverage/
+playwright-report/
+test-results/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor
+.idea/
+*.swp

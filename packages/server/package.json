@@ -1,0 +1,13 @@
+{
+  "name": "@browser-mcp/server",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "dependencies": {
+    "@browser-mcp/shared": "*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.76"
+  }
+}

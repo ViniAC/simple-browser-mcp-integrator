@@ -1,0 +1,10 @@
+{
+  "name": "@browser-mcp/shared",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./path": "./path.ts",
+    "./page-inventory": "./page-inventory.ts",
+    "./action-error": "./action-error.ts"
+  }
+}
