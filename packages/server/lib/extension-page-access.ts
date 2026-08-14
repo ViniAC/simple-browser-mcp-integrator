@@ -7,6 +7,8 @@ import { launchDevBrowser } from "./launch-dev-browser.js";
 import type { PageAccess } from "./page-access.js";
 import { prepareExtension } from "./prepare-extension.js";
 
+const defaultAttachTimeoutMs = 20_000;
+
 export type ExtensionPageAccess = PageAccess & { close(): Promise<void> };
 
 type Session = {
@@ -15,10 +17,23 @@ type Session = {
 };
 
 export function createExtensionPageAccess(): ExtensionPageAccess {
+  return pageAccessFromSession(startLaunchSession);
+}
+
+export function createAttachPageAccess(options?: {
+  attachTimeoutMs?: number;
+}): ExtensionPageAccess {
+  const attachTimeoutMs = options?.attachTimeoutMs ?? defaultAttachTimeoutMs;
+  return pageAccessFromSession(() => startAttachSession(attachTimeoutMs));
+}
+
+function pageAccessFromSession(
+  start: () => Promise<Session>,
+): ExtensionPageAccess {
   let session: Promise<Session> | undefined;
 
   async function ensure() {
-    session ??= startSession();
+    session ??= start();
     return session;
   }
 
@@ -43,14 +58,34 @@ export function createExtensionPageAccess(): ExtensionPageAccess {
       });
     },
     async close() {
-      if (session) {
+      if (!session) {
+        return;
+      }
+      try {
         await (await session).close();
+      } catch {
+        // Session start already closed its resources.
       }
     },
   };
 }
 
-async function startSession(): Promise<Session> {
+async function startAttachSession(attachTimeoutMs: number): Promise<Session> {
+  const token = randomBytes(16).toString("hex");
+  const socket = await startExtensionSocket(token);
+  try {
+    await socket.waitForExtension(attachTimeoutMs);
+  } catch (error) {
+    await socket.close();
+    throw notConnected(error);
+  }
+  return {
+    send: socket.send,
+    close: socket.close,
+  };
+}
+
+async function startLaunchSession(): Promise<Session> {
   const token = randomBytes(16).toString("hex");
   const socket = await startExtensionSocket(token);
   const extensionDir = await prepareExtension({
@@ -59,14 +94,12 @@ async function startSession(): Promise<Session> {
   });
   const browser = await launchDevBrowser(extensionDir);
   try {
-    await socket.waitForExtension(20_000);
+    await socket.waitForExtension(defaultAttachTimeoutMs);
   } catch (error) {
     await browser.close();
     await socket.close();
     await removeTemp(extensionDir);
-    throw error instanceof ActionError
-      ? error
-      : new ActionError("not_connected");
+    throw notConnected(error);
   }
   return {
     send: socket.send,
@@ -76,6 +109,10 @@ async function startSession(): Promise<Session> {
       await removeTemp(extensionDir);
     },
   };
+}
+
+function notConnected(error: unknown) {
+  return error instanceof ActionError ? error : new ActionError("not_connected");
 }
 
 function removeTemp(dir: string) {
