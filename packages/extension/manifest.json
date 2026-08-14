@@ -6,5 +6,12 @@
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Not attached",
+    "default_icon": {
+      "16": "icons/not-attached-16.png",
+      "32": "icons/not-attached-32.png"
+    }
   }
 }

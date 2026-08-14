@@ -8,7 +8,7 @@ export function createServer(
   fixtureUrl?: string,
 ): McpServer {
   const instructions = fixtureUrl
-    ? `The Fixture Page is at ${fixtureUrl} Open it with open_page, then get_inventory, type, and click. After Clicking Submit, get_inventory again to see the Result region change.`
+    ? `Load unpacked the Extension from packages/extension/dist once. The Fixture Page is at ${fixtureUrl} Open it with open_page, then get_inventory, type, and click. After Clicking Submit, get_inventory again to see the Result region change.`
     : undefined;
   const server = new McpServer(
     {

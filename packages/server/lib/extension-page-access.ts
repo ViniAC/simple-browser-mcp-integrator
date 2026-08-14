@@ -2,9 +2,7 @@ import { randomBytes } from "node:crypto";
 import { ActionError } from "../../shared/action-error.js";
 import type { PageInventory } from "../../shared/page-inventory.js";
 import { startExtensionSocket } from "./extension-socket.js";
-import { launchDevBrowser } from "./launch-dev-browser.js";
 import type { PageAccess } from "./page-access.js";
-import { prepareExtension } from "./prepare-extension.js";
 
 const defaultAttachTimeoutMs = 20_000;
 
@@ -13,12 +11,7 @@ export type AttachPageAccess = ExtensionPageAccess & { readonly port: number };
 
 type Session = {
   send<T>(type: string, payload?: Record<string, unknown>): Promise<T>;
-  close(): Promise<void>;
 };
-
-export function createExtensionPageAccess(): ExtensionPageAccess {
-  return pageAccessFromSession(startLaunchSession);
-}
 
 export async function createAttachPageAccess(options?: {
   attachTimeoutMs?: number;
@@ -42,7 +35,7 @@ export async function createAttachPageAccess(options?: {
 
 function pageAccessFromSession(
   start: () => Promise<Session>,
-  closeResource?: () => Promise<void>,
+  closeResource: () => Promise<void>,
 ): ExtensionPageAccess {
   let session: Promise<Session> | undefined;
 
@@ -80,18 +73,7 @@ function pageAccessFromSession(
       });
     },
     async close() {
-      if (closeResource) {
-        await closeResource();
-        return;
-      }
-      if (!session) {
-        return;
-      }
-      try {
-        await (await session).close();
-      } catch {
-        // Session start already closed its resources.
-      }
+      await closeResource();
     },
   };
 }
@@ -107,33 +89,6 @@ async function startAttachSession(
   }
   return {
     send: socket.send,
-    close: socket.close,
-  };
-}
-
-async function startLaunchSession(): Promise<Session> {
-  const token = randomBytes(16).toString("hex");
-  const socket = await startExtensionSocket({ secret: token });
-  const extensionDir = await prepareExtension({
-    websocketUrl: `ws://127.0.0.1:${socket.port}`,
-    token,
-  });
-  const browser = await launchDevBrowser(extensionDir.dir);
-  try {
-    await socket.waitForExtension(defaultAttachTimeoutMs);
-  } catch (error) {
-    await browser.close();
-    await socket.close();
-    await extensionDir.close();
-    throw notConnected(error);
-  }
-  return {
-    send: socket.send,
-    async close() {
-      await browser.close();
-      await socket.close();
-      await extensionDir.close();
-    },
   };
 }
 

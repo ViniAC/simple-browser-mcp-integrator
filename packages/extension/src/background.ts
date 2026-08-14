@@ -28,6 +28,9 @@ function connect(config: Config) {
   const socket = new WebSocket(
     `${config.websocketUrl}?token=${encodeURIComponent(config.token)}`,
   );
+  socket.addEventListener("open", () => {
+    setAttached(true);
+  });
   socket.addEventListener("message", async (event) => {
     const request = JSON.parse(String(event.data)) as Request;
     try {
@@ -43,6 +46,7 @@ function connect(config: Config) {
     }
   });
   socket.addEventListener("close", () => {
+    setAttached(false);
     setTimeout(() => connect(config), 500);
   });
 }
@@ -201,4 +205,17 @@ function waitUntilComplete(tabId: number) {
       chrome.tabs.onUpdated.removeListener(listener);
     },
   };
+}
+
+function setAttached(attached: boolean) {
+  const name = attached ? "attached" : "not-attached";
+  void chrome.action.setIcon({
+    path: {
+      16: `icons/${name}-16.png`,
+      32: `icons/${name}-32.png`,
+    },
+  });
+  void chrome.action.setTitle({
+    title: attached ? "Attached" : "Not attached",
+  });
 }
