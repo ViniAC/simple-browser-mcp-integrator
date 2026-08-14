@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { parseToolJson } from "./agent-host.js";
 import { startDevBrowserSession } from "./dev-browser-session.js";
+import { fixtureInventory } from "./fixture-inventory.js";
 
 describe("Dev Browser Page Inventory", () => {
   let session: Awaited<ReturnType<typeof startDevBrowserSession>>;
@@ -27,35 +28,6 @@ describe("Dev Browser Page Inventory", () => {
     const parsed = parseToolJson(await session.host.callTool("get_inventory"));
 
     expect(parsed.isError).toBe(false);
-    expect(parsed.body).toEqual({
-      title: "Fixture Page",
-      url: session.fixtureUrl,
-      inputLabels: [
-        "Full name",
-        "Password",
-        "Notes",
-        "Country",
-        "Subscribe",
-        "Result",
-      ],
-      elements: [
-        { role: "textbox", name: "Full name", value: "", enabled: true },
-        { role: "textbox", name: "Password", value: "empty", enabled: true },
-        { role: "textbox", name: "Notes", value: "", enabled: true },
-        { role: "combobox", name: "Country", value: "Choose", enabled: true },
-        {
-          role: "checkbox",
-          name: "Subscribe",
-          value: "unchecked",
-          enabled: true,
-        },
-        { role: "button", name: "Submit", value: "", enabled: true },
-        { role: "textbox", name: "Result", value: "Ready", enabled: true },
-        { role: "link", name: "Continue", value: "", enabled: true },
-        { role: "button", name: "Duplicate", value: "", enabled: true },
-        { role: "button", name: "Duplicate", value: "", enabled: true },
-        { role: "button", name: "Locked", value: "", enabled: false },
-      ],
-    });
+    expect(parsed.body).toEqual(fixtureInventory(session.fixtureUrl));
   }, 30_000);
 });

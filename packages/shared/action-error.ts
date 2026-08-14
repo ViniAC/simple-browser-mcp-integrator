@@ -1,8 +1,19 @@
-export type ActionErrorCode =
-  | "not_found"
-  | "ambiguous"
-  | "disabled"
-  | "not_connected";
+export const actionErrorCodes = [
+  "not_found",
+  "ambiguous",
+  "disabled",
+  "not_connected",
+  "no_match",
+] as const;
+
+export type ActionErrorCode = (typeof actionErrorCodes)[number];
+
+export function isActionErrorCode(value: unknown): value is ActionErrorCode {
+  return (
+    typeof value === "string" &&
+    (actionErrorCodes as readonly string[]).includes(value)
+  );
+}
 
 export class ActionError extends Error {
   readonly code: ActionErrorCode;

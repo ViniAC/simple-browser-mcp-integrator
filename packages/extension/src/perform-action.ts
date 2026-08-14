@@ -3,8 +3,8 @@ type Action =
   | { type: "click"; role: string; name: string };
 
 type ActionResult =
-  | { ok: true }
-  | { error: "not_found" | "ambiguous" | "disabled" };
+  | { ok: true; open?: { url: string } }
+  | { error: "not_found" | "ambiguous" | "disabled" | "no_match" };
 
 export function performAction(action: Action): ActionResult {
   function normalize(text: string) {
@@ -71,6 +71,11 @@ export function performAction(action: Action): ActionResult {
     return normalize(element.textContent ?? "");
   }
 
+  function notifyChange(target: HTMLElement) {
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+    target.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
   const matches = [
     ...document.querySelectorAll("a[href], button, input, textarea, select"),
   ].filter(
@@ -96,7 +101,24 @@ export function performAction(action: Action): ActionResult {
   }
 
   if (action.type === "click") {
+    const open =
+      element instanceof HTMLAnchorElement && element.href
+        ? { url: element.href }
+        : undefined;
     element.click();
+    return open ? { ok: true, open } : { ok: true };
+  }
+
+  if (element instanceof HTMLSelectElement) {
+    const option = [...element.options].find(
+      (candidate) =>
+        candidate.label === action.value || candidate.value === action.value,
+    );
+    if (!option) {
+      return { error: "no_match" };
+    }
+    element.value = option.value;
+    notifyChange(element);
     return { ok: true };
   }
 
@@ -109,9 +131,8 @@ export function performAction(action: Action): ActionResult {
 
   element.focus();
   element.value = "";
-  element.dispatchEvent(new Event("input", { bubbles: true }));
+  notifyChange(element);
   element.value = action.value;
-  element.dispatchEvent(new Event("input", { bubbles: true }));
-  element.dispatchEvent(new Event("change", { bubbles: true }));
+  notifyChange(element);
   return { ok: true };
 }
