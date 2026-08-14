@@ -1,5 +1,11 @@
 {
   "name": "@browser-mcp/extension",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "esbuild": "^0.28.2"
+  },
+  "scripts": {
+    "build": "node --import tsx build.ts"
+  }
 }
