@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { buildLoadableExtension } from "../../extension/build.js";
 import { launchDevBrowser } from "../lib/launch-dev-browser.js";
 import { serveFixture } from "../lib/serve-fixture.js";
+import { createDevBrowserTabs } from "./dev-browser-tabs.js";
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const attachServerEntry = path.join(
@@ -63,11 +64,14 @@ export async function startDevBrowserSession(
     beforeLaunchResource =
       await options.beforeExtensionLaunch?.(extension.websocketUrl);
     browser = await launchDevBrowser(extensionDir);
+    const tabs = createDevBrowserTabs(browser.port);
+    await tabs.ready();
     return {
       get host() {
         return requireHost(host);
       },
       fixtureUrl: url,
+      tabs,
       async restartServer() {
         await requireHost(host).close();
         host = await startAttachAgentHost(extension.secret, extension.port);
