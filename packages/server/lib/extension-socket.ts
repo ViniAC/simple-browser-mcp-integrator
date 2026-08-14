@@ -7,19 +7,29 @@ type Pending = {
   reject: (error: Error) => void;
 };
 
-export async function startExtensionSocket(token: string) {
+type AttachWaiter = {
+  resolve: (socket: WebSocket) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
+
+export async function startExtensionSocket(options: {
+  secret: string;
+  port?: number;
+}) {
   const pending = new Map<number, Pending>();
+  const attachWaiters = new Set<AttachWaiter>();
   let nextId = 1;
   let extension: WebSocket | undefined;
-  let resolveExtension!: (socket: WebSocket) => void;
-  const extensionConnected = new Promise<WebSocket>((resolve) => {
-    resolveExtension = resolve;
-  });
+  let closePromise: Promise<void> | undefined;
 
-  const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+  const wss = new WebSocketServer({
+    host: "127.0.0.1",
+    port: options.port ?? 0,
+  });
   wss.on("connection", (socket, request) => {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
-    if (url.searchParams.get("token") !== token) {
+    if (url.searchParams.get("token") !== options.secret) {
       socket.close();
       return;
     }
@@ -28,6 +38,12 @@ export async function startExtensionSocket(token: string) {
       return;
     }
     extension = socket;
+    socket.on("close", () => {
+      if (extension === socket) {
+        extension = undefined;
+      }
+      rejectPending(pending);
+    });
     socket.on("message", (data) => {
       const message = JSON.parse(String(data)) as {
         id: number;
@@ -45,22 +61,19 @@ export async function startExtensionSocket(token: string) {
       }
       waiter.resolve(message.result);
     });
-    resolveExtension(socket);
+    resolveAttachWaiters(attachWaiters, socket);
   });
 
-  await new Promise<void>((resolve) => wss.once("listening", resolve));
+  await waitUntilListening(wss);
   const address = wss.address() as AddressInfo;
 
   return {
     port: address.port,
     waitForExtension(ms: number) {
-      let timer: ReturnType<typeof setTimeout>;
-      return Promise.race([
-        extensionConnected.finally(() => clearTimeout(timer)),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new ActionError("not_connected")), ms);
-        }),
-      ]);
+      if (extension && extension.readyState === extension.OPEN) {
+        return Promise.resolve(extension);
+      }
+      return waitForAttach(attachWaiters, ms);
     },
     send<T>(type: string, payload: Record<string, unknown> = {}) {
       const socket = extension;
@@ -77,8 +90,67 @@ export async function startExtensionSocket(token: string) {
       });
     },
     close() {
-      extension?.close();
-      return new Promise<void>((resolve) => wss.close(() => resolve()));
+      closePromise ??= closeSocketServer(wss, extension, attachWaiters, pending);
+      return closePromise;
     },
   };
+}
+
+function waitUntilListening(wss: WebSocketServer) {
+  return new Promise<void>((resolve, reject) => {
+    wss.once("listening", resolve);
+    wss.once("error", reject);
+  });
+}
+
+function waitForAttach(waiters: Set<AttachWaiter>, ms: number) {
+  return new Promise<WebSocket>((resolve, reject) => {
+    const waiter: AttachWaiter = {
+      resolve,
+      reject,
+      timer: setTimeout(() => {
+        waiters.delete(waiter);
+        reject(new ActionError("not_connected"));
+      }, ms),
+    };
+    waiters.add(waiter);
+  });
+}
+
+function resolveAttachWaiters(
+  waiters: Set<AttachWaiter>,
+  socket: WebSocket,
+) {
+  for (const waiter of waiters) {
+    clearTimeout(waiter.timer);
+    waiter.resolve(socket);
+  }
+  waiters.clear();
+}
+
+function rejectAttachWaiters(waiters: Set<AttachWaiter>) {
+  for (const waiter of waiters) {
+    clearTimeout(waiter.timer);
+    waiter.reject(new ActionError("not_connected"));
+  }
+  waiters.clear();
+}
+
+function rejectPending(pending: Map<number, Pending>) {
+  for (const waiter of pending.values()) {
+    waiter.reject(new ActionError("not_connected"));
+  }
+  pending.clear();
+}
+
+function closeSocketServer(
+  wss: WebSocketServer,
+  extension: WebSocket | undefined,
+  attachWaiters: Set<AttachWaiter>,
+  pending: Map<number, Pending>,
+) {
+  rejectAttachWaiters(attachWaiters);
+  rejectPending(pending);
+  extension?.close();
+  return new Promise<void>((resolve) => wss.close(() => resolve()));
 }
