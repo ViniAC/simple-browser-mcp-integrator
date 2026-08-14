@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { ActionError } from "../../shared/action-error.js";
-import type { Path } from "../../shared/path.js";
 import type { PageInventory } from "../../shared/page-inventory.js";
 import { startExtensionSocket } from "./extension-socket.js";
 import { launchDevBrowser } from "./launch-dev-browser.js";
@@ -30,13 +29,18 @@ export function createExtensionPageAccess(): ExtensionPageAccess {
     async getInventory() {
       return (await ensure()).send<PageInventory>("inventory");
     },
-    async click(_path: Path) {
-      await ensure();
-      throw new ActionError("not_found");
+    async click(path) {
+      await (await ensure()).send("click", {
+        role: path.role,
+        name: path.name,
+      });
     },
-    async type(_path: Path, _value: string) {
-      await ensure();
-      throw new ActionError("not_found");
+    async type(path, value) {
+      await (await ensure()).send("type", {
+        role: path.role,
+        name: path.name,
+        value,
+      });
     },
     async close() {
       if (session) {
