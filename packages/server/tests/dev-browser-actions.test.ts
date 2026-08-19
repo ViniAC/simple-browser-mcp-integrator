@@ -82,6 +82,38 @@ describe("Dev Browser Type and Click", () => {
   }, 30_000);
 
   it.each([
+    {
+      name: "Email",
+      value: "ada@example.com",
+      fields: { email: "ada@example.com" },
+    },
+    { name: "Number", value: "42", fields: { number: "42" } },
+    { name: "Date", value: "2006-01-02", fields: { date: "2006-01-02" } },
+  ])(
+    "type on $name replaces the value; a later inventory shows what was typed",
+    async ({ name, value, fields }) => {
+      await session.host.callTool("open_page", { url: session.fixtureUrl });
+      const typed = parseToolJson(
+        await session.host.callTool("type", {
+          role: "textbox",
+          name,
+          value,
+        }),
+      );
+      const inventory = parseToolJson(
+        await session.host.callTool("get_inventory"),
+      );
+
+      expect(typed.isError).toBe(false);
+      expect(typed.body).toEqual({ ok: true });
+      expect(inventory.body).toEqual(
+        fixtureInventory(session.fixtureUrl, fields),
+      );
+    },
+    30_000,
+  );
+
+  it.each([
     { value: "Brazil", country: "Brazil" },
     { value: "us", country: "United States" },
   ])(
