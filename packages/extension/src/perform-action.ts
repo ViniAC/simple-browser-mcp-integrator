@@ -7,6 +7,32 @@ type ActionResult =
   | { error: "not_found" | "ambiguous" | "disabled" | "no_match" };
 
 export function performAction(action: Action): ActionResult {
+  const nativeTextLikeTypes = new Set([
+    "text",
+    "search",
+    "tel",
+    "url",
+    "email",
+    "number",
+    "date",
+    "time",
+    "month",
+    "week",
+    "password",
+  ]);
+
+  function isNativeTextLike(
+    element: HTMLElement,
+  ): element is HTMLInputElement | HTMLTextAreaElement {
+    if (element instanceof HTMLTextAreaElement) {
+      return true;
+    }
+    return (
+      element instanceof HTMLInputElement &&
+      nativeTextLikeTypes.has(element.type)
+    );
+  }
+
   function normalize(text: string) {
     return text.replace(/\s+/g, " ").trim();
   }
@@ -122,10 +148,7 @@ export function performAction(action: Action): ActionResult {
     return { ok: true };
   }
 
-  if (
-    !(element instanceof HTMLInputElement) &&
-    !(element instanceof HTMLTextAreaElement)
-  ) {
+  if (!isNativeTextLike(element)) {
     return { error: "not_found" };
   }
 

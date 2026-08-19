@@ -7,7 +7,8 @@
     "packages/*"
   ],
   "scripts": {
-    "mcp": "node --import tsx packages/server/stdio.ts",
+    "mcp": "node --import tsx packages/server/http.ts",
+    "mcp:stdio": "node --import tsx packages/server/stdio.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run test"

@@ -1,3 +1,5 @@
+import { WebSocket } from "ws";
+
 export type DevBrowserPage = {
   id: string;
   url: string;
@@ -9,6 +11,7 @@ type ChromeTarget = {
   type: string;
   url: string;
   title: string;
+  webSocketDebuggerUrl?: string;
 };
 
 export function createDevBrowserTabs(port: number) {
@@ -69,6 +72,33 @@ export function createDevBrowserTabs(port: number) {
     throw new Error("timed out closing Dev Browser tabs");
   }
 
+  async function extensionId() {
+    let id = "";
+    await waitUntil(async () => {
+      const worker = (await json<ChromeTarget[]>("/json/list")).find(
+        (target) =>
+          target.type === "service_worker" &&
+          target.url.startsWith("chrome-extension://"),
+      );
+      if (!worker) {
+        return false;
+      }
+      id = new URL(worker.url).hostname;
+      return id.length > 0;
+    }, "Extension service worker");
+    return id;
+  }
+
+  async function inspectPage(pageId: string) {
+    const target = (await json<ChromeTarget[]>("/json/list")).find(
+      (candidate) => candidate.id === pageId,
+    );
+    if (!target?.webSocketDebuggerUrl) {
+      throw new Error(`Dev Browser page ${pageId} has no debugger`);
+    }
+    return connectDebugger(target.webSocketDebuggerUrl);
+  }
+
   async function sleepExtensionWorker() {
     const before = (await json<ChromeTarget[]>("/json/list"))
       .filter((target) => target.type === "service_worker")
@@ -103,7 +133,17 @@ export function createDevBrowserTabs(port: number) {
     return JSON.parse(text) as T;
   }
 
-  return { ready, pages, openFocused, focus, close, closeAll, sleepExtensionWorker };
+  return {
+    ready,
+    pages,
+    openFocused,
+    focus,
+    close,
+    closeAll,
+    extensionId,
+    inspectPage,
+    sleepExtensionWorker,
+  };
 }
 
 async function waitUntil(check: () => Promise<boolean>, label: string) {
@@ -126,4 +166,78 @@ async function settled(check: () => Promise<boolean>, ms: number) {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function connectDebugger(url: string) {
+  const socket = new WebSocket(url);
+  await opened(socket);
+  let nextId = 0;
+  const pending = new Map<
+    number,
+    { resolve: (value: unknown) => void; reject: (error: Error) => void }
+  >();
+  socket.on("message", (data) => {
+    const message = JSON.parse(String(data)) as {
+      id?: number;
+      result?: unknown;
+      error?: { message?: string };
+    };
+    if (message.id === undefined) {
+      return;
+    }
+    const waiter = pending.get(message.id);
+    if (!waiter) {
+      return;
+    }
+    pending.delete(message.id);
+    if (message.error) {
+      waiter.reject(new Error(message.error.message ?? "CDP error"));
+      return;
+    }
+    waiter.resolve(message.result);
+  });
+  socket.on("close", () => {
+    for (const waiter of pending.values()) {
+      waiter.reject(new Error("Dev Browser debugger closed"));
+    }
+    pending.clear();
+  });
+
+  async function send(method: string, params?: Record<string, unknown>) {
+    const id = ++nextId;
+    const result = new Promise<unknown>((resolve, reject) => {
+      pending.set(id, { resolve, reject });
+    });
+    socket.send(JSON.stringify({ id, method, params }));
+    return result;
+  }
+
+  await send("Runtime.enable");
+
+  return {
+    async evaluate<T>(expression: string) {
+      const result = (await send("Runtime.evaluate", {
+        expression,
+        returnByValue: true,
+        awaitPromise: true,
+      })) as {
+        result?: { value?: T };
+        exceptionDetails?: { text?: string };
+      };
+      if (result.exceptionDetails) {
+        throw new Error(result.exceptionDetails.text ?? expression);
+      }
+      return result.result?.value as T;
+    },
+    close() {
+      socket.close();
+    },
+  };
+}
+
+function opened(socket: WebSocket) {
+  return new Promise<void>((resolve, reject) => {
+    socket.once("open", () => resolve());
+    socket.once("error", reject);
+  });
 }

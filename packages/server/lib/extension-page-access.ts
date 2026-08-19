@@ -3,6 +3,7 @@ import { ActionError } from "../../shared/action-error.js";
 import type { PageInventory } from "../../shared/page-inventory.js";
 import { startExtensionSocket } from "./extension-socket.js";
 import type { PageAccess } from "./page-access.js";
+import { serializePageAccess } from "./serialize-page-access.js";
 
 const defaultAttachTimeoutMs = 20_000;
 
@@ -24,12 +25,16 @@ export async function createAttachPageAccess(options?: {
     secret,
     port: options?.port,
   });
+  const inner = pageAccessFromSession(
+    () => startAttachSession(socket, attachTimeoutMs),
+    socket.close,
+  );
   return Object.assign(
-    pageAccessFromSession(
-      () => startAttachSession(socket, attachTimeoutMs),
-      socket.close,
-    ),
-    { port: socket.port },
+    serializePageAccess(inner, { busyTimeoutMs: attachTimeoutMs }),
+    {
+      port: socket.port,
+      close: () => inner.close(),
+    },
   );
 }
 

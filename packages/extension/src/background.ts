@@ -1,15 +1,10 @@
 /// <reference types="chrome" />
 
-import { isActionErrorCode } from "../../shared/action-error.js";
 import { isOpenTarget, type OpenTarget } from "../../shared/open-target.js";
+import { startAttach } from "./attach.js";
 import { collectInventory } from "./collect-inventory.js";
 import { boundTabId, tabForOpen, watchCurrentPage } from "./current-page.js";
 import { performAction } from "./perform-action.js";
-
-type Config = {
-  websocketUrl: string;
-  token: string;
-};
 
 type Request =
   | { id: number; type: "open"; url: string; target?: OpenTarget }
@@ -17,42 +12,8 @@ type Request =
   | { id: number; type: "click"; role: string; name: string }
   | { id: number; type: "type"; role: string; name: string; value: string };
 
-void start();
 watchCurrentPage();
-
-async function start() {
-  const config = (await fetch(chrome.runtime.getURL("config.json")).then(
-    (response) => response.json(),
-  )) as Config;
-  connect(config);
-}
-
-function connect(config: Config) {
-  const socket = new WebSocket(
-    `${config.websocketUrl}?token=${encodeURIComponent(config.token)}`,
-  );
-  socket.addEventListener("open", () => {
-    setAttached(true);
-  });
-  socket.addEventListener("message", async (event) => {
-    const request = JSON.parse(String(event.data)) as Request;
-    try {
-      socket.send(
-        JSON.stringify({ id: request.id, result: await handle(request) }),
-      );
-    } catch (error) {
-      const code =
-        error instanceof Error && isActionErrorCode(error.message)
-          ? error.message
-          : "not_found";
-      socket.send(JSON.stringify({ id: request.id, error: code }));
-    }
-  });
-  socket.addEventListener("close", () => {
-    setAttached(false);
-    setTimeout(() => connect(config), 500);
-  });
-}
+void startAttach(handle);
 
 async function handle(request: Request) {
   switch (request.type) {
@@ -174,17 +135,4 @@ function waitUntilOpen(tabId: number, url: string, pollImmediately = true) {
       chrome.tabs.onUpdated.removeListener(listener);
     },
   };
-}
-
-function setAttached(attached: boolean) {
-  const name = attached ? "attached" : "not-attached";
-  void chrome.action.setIcon({
-    path: {
-      16: `icons/${name}-16.png`,
-      32: `icons/${name}-32.png`,
-    },
-  });
-  void chrome.action.setTitle({
-    title: attached ? "Attached" : "Not attached",
-  });
 }

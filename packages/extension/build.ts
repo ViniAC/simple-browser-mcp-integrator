@@ -56,16 +56,23 @@ export async function buildConfiguredExtension(
 ) {
   await mkdir(dir, { recursive: true });
   await esbuild.build({
-    entryPoints: [path.join(extensionRoot, "src/background.ts")],
+    entryPoints: [
+      path.join(extensionRoot, "src/background.ts"),
+      path.join(extensionRoot, "src/popup.ts"),
+    ],
     bundle: true,
     format: "iife",
-    outfile: path.join(dir, "background.js"),
+    outdir: dir,
     platform: "browser",
     target: "chrome120",
   });
   await copyFile(
     path.join(extensionRoot, "manifest.json"),
     path.join(dir, "manifest.json"),
+  );
+  await copyFile(
+    path.join(extensionRoot, "src/popup.html"),
+    path.join(dir, "popup.html"),
   );
   await writeFile(path.join(dir, "config.json"), JSON.stringify(config));
   await writeExtensionIcons(dir);

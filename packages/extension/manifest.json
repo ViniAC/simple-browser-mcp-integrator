@@ -8,6 +8,7 @@
     "service_worker": "background.js"
   },
   "action": {
+    "default_popup": "popup.html",
     "default_title": "Not attached",
     "default_icon": {
       "16": "icons/not-attached-16.png",

@@ -4,6 +4,9 @@ export function fixtureInventory(
     fullName?: string;
     notes?: string;
     password?: string;
+    email?: string;
+    number?: string;
+    date?: string;
     result?: string;
     subscribe?: string;
     country?: string;
@@ -16,6 +19,9 @@ export function fixtureInventory(
       "Full name",
       "Password",
       "Notes",
+      "Email",
+      "Number",
+      "Date",
       "Country",
       "Subscribe",
       "Result",
@@ -37,6 +43,24 @@ export function fixtureInventory(
         role: "textbox",
         name: "Notes",
         value: values.notes ?? "",
+        enabled: true,
+      },
+      {
+        role: "textbox",
+        name: "Email",
+        value: values.email ?? "",
+        enabled: true,
+      },
+      {
+        role: "textbox",
+        name: "Number",
+        value: values.number ?? "",
+        enabled: true,
+      },
+      {
+        role: "textbox",
+        name: "Date",
+        value: values.date ?? "",
         enabled: true,
       },
       {

@@ -4,6 +4,7 @@ export const actionErrorCodes = [
   "disabled",
   "not_connected",
   "no_match",
+  "busy",
 ] as const;
 
 export type ActionErrorCode = (typeof actionErrorCodes)[number];
