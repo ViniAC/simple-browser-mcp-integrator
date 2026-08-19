@@ -2,14 +2,13 @@ import { describe, expect, it } from "vitest";
 import { createFakePageAccess, type FakePageSeed } from "../fake-page-access.js";
 import { listenMcpHttp } from "../lib/listen-http.js";
 import type { PageAccess } from "../lib/page-access.js";
-import { serializePageAccess } from "../lib/serialize-page-access.js";
 import { parseToolJson, startHttpAgentHost } from "./agent-host.js";
 
-const waitMs = 250;
+const busyTimeoutMs = 250;
 
 describe("many HTTP Agent Hosts share one current page", () => {
   it("Open from one is the current page the other inventories", async () => {
-    const session = await startManyHosts(serializePageAccess(createFakePageAccess(seed()), waitMs));
+    const session = await startManyHosts(createFakePageAccess(seed()));
     try {
       const opened = parseToolJson(
         await session.a.callTool({
@@ -25,8 +24,22 @@ describe("many HTTP Agent Hosts share one current page", () => {
         isError: false,
         body: { url: "https://example.test/opened" },
       });
-      expect(inventory.isError).toBe(false);
-      expect(inventory.body).toMatchObject({ url: "https://example.test/opened" });
+      expect(inventory).toEqual({
+        isError: false,
+        body: {
+          title: "Sign in",
+          url: "https://example.test/opened",
+          inputLabels: ["Email"],
+          elements: [
+            {
+              role: "textbox",
+              name: "Email",
+              value: "old@b.test",
+              enabled: true,
+            },
+          ],
+        },
+      });
     } finally {
       await session.close();
     }
@@ -38,7 +51,7 @@ describe("many HTTP Agent Hosts share one current page", () => {
       releaseFirst = resolve;
     });
     const inner = heldFirstType(seed(), firstHold);
-    const session = await startManyHosts(serializePageAccess(inner, 5_000));
+    const session = await startManyHosts(inner);
 
     try {
       const first = session.a.callTool({
@@ -50,6 +63,7 @@ describe("many HTTP Agent Hosts share one current page", () => {
         name: "type",
         arguments: { role: "textbox", name: "Email", value: "grace@b.test" },
       });
+      await delay(50);
       releaseFirst();
       expect(parseToolJson(await first)).toEqual({
         isError: false,
@@ -62,12 +76,24 @@ describe("many HTTP Agent Hosts share one current page", () => {
       const inventory = parseToolJson(
         await session.b.callTool({ name: "get_inventory", arguments: {} }),
       );
-      expect(inventory.body).toMatchObject({
-        elements: [
-          { role: "textbox", name: "Email", value: "grace@b.test", enabled: true },
-        ],
+      expect(inventory).toEqual({
+        isError: false,
+        body: {
+          title: "Sign in",
+          url: "https://example.test/form",
+          inputLabels: ["Email"],
+          elements: [
+            {
+              role: "textbox",
+              name: "Email",
+              value: "grace@b.test",
+              enabled: true,
+            },
+          ],
+        },
       });
     } finally {
+      releaseFirst();
       await session.close();
     }
   });
@@ -78,7 +104,7 @@ describe("many HTTP Agent Hosts share one current page", () => {
       releaseFirst = resolve;
     });
     const inner = heldFirstType(seed(), firstHold);
-    const session = await startManyHosts(serializePageAccess(inner, waitMs));
+    const session = await startManyHosts(inner, busyTimeoutMs);
 
     try {
       const first = session.a.callTool({
@@ -119,6 +145,7 @@ describe("many HTTP Agent Hosts share one current page", () => {
         },
       });
     } finally {
+      releaseFirst();
       await session.close();
     }
   });
@@ -159,8 +186,8 @@ function heldFirstType(page: FakePageSeed, hold: Promise<void>) {
   return access;
 }
 
-async function startManyHosts(pageAccess: PageAccess) {
-  const http = await listenMcpHttp({ pageAccess, port: 0 });
+async function startManyHosts(pageAccess: PageAccess, busyTimeoutMs?: number) {
+  const http = await listenMcpHttp({ pageAccess, port: 0, busyTimeoutMs });
   const a = await startHttpAgentHost(http.url);
   const b = await startHttpAgentHost(http.url);
   return {
@@ -172,4 +199,8 @@ async function startManyHosts(pageAccess: PageAccess) {
       await http.close();
     },
   };
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }

@@ -29,10 +29,13 @@ export async function createAttachPageAccess(options?: {
     () => startAttachSession(socket, attachTimeoutMs),
     socket.close,
   );
-  return Object.assign(serializePageAccess(inner, attachTimeoutMs), {
-    port: socket.port,
-    close: () => inner.close(),
-  });
+  return Object.assign(
+    serializePageAccess(inner, { busyTimeoutMs: attachTimeoutMs }),
+    {
+      port: socket.port,
+      close: () => inner.close(),
+    },
+  );
 }
 
 function pageAccessFromSession(

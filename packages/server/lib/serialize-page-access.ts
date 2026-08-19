@@ -1,15 +1,20 @@
 import { ActionError } from "../../shared/action-error.js";
 import type { PageAccess } from "./page-access.js";
 
+export const defaultBusyTimeoutMs = 20_000;
+
+type Waiter = {
+  grant: () => void;
+  fail: () => void;
+};
+
 export function serializePageAccess(
   inner: PageAccess,
-  waitMs: number,
+  options?: { busyTimeoutMs?: number },
 ): PageAccess {
-  let locked = false;
-  const waiters: Array<{
-    resume: () => void;
-    timer: ReturnType<typeof setTimeout>;
-  }> = [];
+  const busyTimeoutMs = options?.busyTimeoutMs ?? defaultBusyTimeoutMs;
+  let running = false;
+  const queue: Waiter[] = [];
 
   async function runExclusive<T>(work: () => Promise<T>): Promise<T> {
     await acquire();
@@ -21,33 +26,47 @@ export function serializePageAccess(
   }
 
   function acquire() {
-    if (!locked) {
-      locked = true;
+    if (!running) {
+      running = true;
       return Promise.resolve();
     }
     return new Promise<void>((resolve, reject) => {
-      const waiter = {
-        resume: () => resolve(),
-        timer: setTimeout(() => {
-          const index = waiters.indexOf(waiter);
-          if (index >= 0) {
-            waiters.splice(index, 1);
+      let settled = false;
+      const waiter: Waiter = {
+        grant() {
+          if (settled) {
+            return;
           }
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        },
+        fail() {
+          if (settled) {
+            return;
+          }
+          settled = true;
           reject(new ActionError("busy"));
-        }, waitMs),
+        },
       };
-      waiters.push(waiter);
+      const timer = setTimeout(() => {
+        const index = queue.indexOf(waiter);
+        if (index >= 0) {
+          queue.splice(index, 1);
+        }
+        waiter.fail();
+      }, busyTimeoutMs);
+      queue.push(waiter);
     });
   }
 
   function release() {
-    const next = waiters.shift();
+    const next = queue.shift();
     if (!next) {
-      locked = false;
+      running = false;
       return;
     }
-    clearTimeout(next.timer);
-    next.resume();
+    next.grant();
   }
 
   return {

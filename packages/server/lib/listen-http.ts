@@ -5,6 +5,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { createServer } from "./create-server.js";
 import type { PageAccess } from "./page-access.js";
+import { serializePageAccess } from "./serialize-page-access.js";
 
 export const mcpHttpPort = 7423;
 export const mcpHttpHost = "127.0.0.1";
@@ -19,10 +20,17 @@ export async function listenMcpHttp(options: {
   pageAccess: PageAccess;
   fixtureUrl?: string;
   port?: number;
+  busyTimeoutMs?: number;
 }) {
+  const sessionOptions = {
+    pageAccess: serializePageAccess(options.pageAccess, {
+      busyTimeoutMs: options.busyTimeoutMs,
+    }),
+    fixtureUrl: options.fixtureUrl,
+  };
   const sessions = new Map<string, Session>();
   const listener = http.createServer((req, res) => {
-    void handleHttp(req, res, sessions, options).catch(() => {
+    void handleHttp(req, res, sessions, sessionOptions).catch(() => {
       if (!res.headersSent) {
         res.writeHead(500).end();
       }
