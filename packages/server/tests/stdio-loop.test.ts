@@ -36,6 +36,22 @@ describe("stdio Agent Host does not launch a Dev Browser", () => {
       await host.close();
     }
   }, 30_000);
+
+  it("does not mention the Fixture Page when serve-fixture is off", async () => {
+    const host = await startStdioAgentHost({
+      BROWSER_MCP_ATTACH_SECRET: "stdio-no-fixture",
+      BROWSER_MCP_ATTACH_PORT: String(await availablePort()),
+      BROWSER_MCP_ATTACH_TIMEOUT_MS: "250",
+      BROWSER_MCP_SERVE_FIXTURE: "0",
+    });
+
+    try {
+      const notes = host.getInstructions() ?? "";
+      expect(notes).not.toContain(fixtureUrl);
+    } finally {
+      await host.close();
+    }
+  }, 30_000);
 });
 
 describe("stdio Agent Host loop", () => {
@@ -45,7 +61,7 @@ describe("stdio Agent Host loop", () => {
     session = await startStdioLoopSession();
     const notes = session.host.getInstructions() ?? "";
     expect(notes).toContain("Load unpacked");
-    expect(notes).toContain(fixtureUrl);
+    expect(notes).toContain(session.fixtureUrl);
   }, 180_000);
 
   afterAll(async () => {
@@ -54,14 +70,15 @@ describe("stdio Agent Host loop", () => {
 
   it("opens the Fixture Page, Types, Clicks Submit, and re-reads the Result", async () => {
     const host = session?.host;
-    if (!host) {
+    const loopFixtureUrl = session?.fixtureUrl;
+    if (!host || !loopFixtureUrl) {
       throw new Error("Agent Host did not attach over stdio");
     }
 
     const opened = parseToolJson(
       await host.callTool({
         name: "open_page",
-        arguments: { url: fixtureUrl },
+        arguments: { url: loopFixtureUrl },
       }),
     );
     const before = parseToolJson(
@@ -87,12 +104,12 @@ describe("stdio Agent Host loop", () => {
       await host.callTool({ name: "get_inventory", arguments: {} }),
     );
 
-    expect(opened).toEqual({ isError: false, body: { url: fixtureUrl } });
-    expect(before.body).toEqual(fixtureInventory(fixtureUrl));
+    expect(opened).toEqual({ isError: false, body: { url: loopFixtureUrl } });
+    expect(before.body).toEqual(fixtureInventory(loopFixtureUrl));
     expect(typed).toEqual({ isError: false, body: { ok: true } });
     expect(clicked).toEqual({ isError: false, body: { ok: true } });
     expect(after.body).toEqual(
-      fixtureInventory(fixtureUrl, {
+      fixtureInventory(loopFixtureUrl, {
         fullName: "Ada Lovelace",
         result: "Submitted",
       }),
@@ -102,6 +119,7 @@ describe("stdio Agent Host loop", () => {
 
 type StdioLoopSession = {
   host: Client;
+  fixtureUrl: string;
   close(): Promise<void>;
 };
 
@@ -109,6 +127,8 @@ async function startStdioLoopSession(): Promise<StdioLoopSession> {
   const extensionDir = await mkdtemp(
     path.join(tmpdir(), "browser-mcp-stdio-"),
   );
+  const fixtureListenPort = await availablePort();
+  const loopFixtureUrl = `http://127.0.0.1:${fixtureListenPort}/`;
   const extension = await buildLoadableExtension({
     dir: extensionDir,
     port: await availablePort(),
@@ -116,11 +136,14 @@ async function startStdioLoopSession(): Promise<StdioLoopSession> {
   const host = await startStdioAgentHost({
     BROWSER_MCP_ATTACH_SECRET: extension.secret,
     BROWSER_MCP_ATTACH_PORT: String(extension.port),
+    BROWSER_MCP_SERVE_FIXTURE: "1",
+    BROWSER_MCP_FIXTURE_PORT: String(fixtureListenPort),
   });
   try {
     const browser = await launchDevBrowser(extensionDir);
     return {
       host,
+      fixtureUrl: loopFixtureUrl,
       async close() {
         await host.close();
         await browser.close();
@@ -139,7 +162,11 @@ async function startStdioAgentHost(extraEnv: Record<string, string> = {}) {
     command: process.execPath,
     args: ["--import", "tsx", stdioEntry],
     cwd: repoRoot,
-    env: { ...inheritedEnv(), ...extraEnv },
+    env: {
+      ...inheritedEnv(),
+      BROWSER_MCP_SERVE_FIXTURE: "0",
+      ...extraEnv,
+    },
     stderr: "pipe",
   });
   const stderr: string[] = [];
