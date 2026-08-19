@@ -21,14 +21,16 @@ export async function listenMcpHttp(options: {
   port?: number;
 }) {
   const sessions = new Map<string, Session>();
+  let boundPort = options.port ?? mcpHttpPort;
   const listener = http.createServer((req, res) => {
-    void handleHttp(req, res, sessions, options).catch(() => {
+    void handleHttp(req, res, sessions, options, boundPort).catch(() => {
       if (!res.headersSent) {
         res.writeHead(500).end();
       }
     });
   });
-  const port = await listen(listener, options.port ?? mcpHttpPort, mcpHttpHost);
+  const port = await listen(listener, boundPort, mcpHttpHost);
+  boundPort = port;
 
   return {
     url: `http://${mcpHttpHost}:${port}${mcpHttpPath}`,
@@ -49,7 +51,12 @@ async function handleHttp(
   res: http.ServerResponse,
   sessions: Map<string, Session>,
   options: { pageAccess: PageAccess; fixtureUrl?: string },
+  port: number,
 ) {
+  if (!isLoopbackHost(req, port)) {
+    res.writeHead(403).end();
+    return;
+  }
   const path = req.url?.split("?")[0] ?? "/";
   if (path !== mcpHttpPath) {
     res.writeHead(404).end();
@@ -113,6 +120,10 @@ async function readJsonBody(req: http.IncomingMessage) {
     return undefined;
   }
   return JSON.parse(raw) as unknown;
+}
+
+function isLoopbackHost(req: http.IncomingMessage, port: number) {
+  return headerValue(req.headers.host) === `${mcpHttpHost}:${port}`;
 }
 
 function headerValue(value: string | string[] | undefined) {
