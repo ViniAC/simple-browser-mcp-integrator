@@ -1,8 +1,16 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createFakePageAccess, type FakePageSeed } from "../fake-page-access.js";
 import { createServer } from "../index.js";
 import type { PageAccess } from "../lib/page-access.js";
+
+export async function startHttpAgentHost(url: string) {
+  const transport = new StreamableHTTPClientTransport(new URL(url));
+  const host = new Client({ name: "test-agent-host", version: "0.0.0" });
+  await host.connect(transport);
+  return host;
+}
 
 export async function startAgentHost(pageAccess: PageAccess) {
   const server = createServer(pageAccess);
